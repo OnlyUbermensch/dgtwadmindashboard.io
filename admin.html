@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>客服控制台 - 絕對正版 軟體小舖</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 30px auto; padding: 20px; background-color: #f5f7fa; }
+    h2 { text-align: center; color: #333; margin-bottom: 20px; }
+    .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    label { font-weight: bold; display: block; margin-bottom: 8px; color: #555; }
+    input { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+    button { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+    .btn-search { background: #3498db; color: white; width: 100%; }
+    .btn-takeover { background: #e74c3c; color: white; padding: 6px 12px; font-size: 14px; }
+    .btn-release { background: #27ae60; color: white; padding: 6px 12px; font-size: 14px; }
+    button:hover { opacity: 0.9; }
+    #status { margin-top: 10px; font-weight: bold; text-align: center; min-height: 20px; }
+    .success { color: #27ae60; } .error { color: #e74c3c; } .info { color: #3498db; }
+    
+    /* 活躍用戶表格 */
+    .user-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .user-table th, .user-table td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+    .user-table th { background: #f8f9fa; font-weight: 600; }
+    .user-id { font-family: monospace; font-size: 13px; color: #666; word-break: break-all; }
+    .actions { display: flex; gap: 8px; }
+    .loading { text-align: center; color: #888; padding: 20px; }
+  </style>
+</head>
+<body>
+  <h2>🤝 客服控制台</h2>
+  
+  <!-- Email 搜尋 -->
+  <div class="card">
+    <label>🔍 方法 A：輸入客戶 Email 查詢</label>
+    <input type="email" id="searchEmail" placeholder="例如：customer@gmail.com">
+    <button class="btn-search" onclick="searchUserId()">查詢用戶</button>
+    <div id="searchResult" style="margin-top:10px;"></div>
+  </div>
+
+  <!-- 近期活躍用戶列表 -->
+  <div class="card">
+    <label>📋 方法 B：近期活躍用戶 (自動追蹤 LINE 暱稱)</label>
+    <div id="recentList" class="loading">載入中...</div>
+  </div>
+  
+  <div id="status"></div>
+
+  <script>
+    const WORKER_URL = 'https://dgtwcsbot.definitegenuinetw.workers.dev';
+    // ✅ 已更新為您的 Token
+    const ADMIN_TOKEN = 'api_Ybxv9qnXbupilSW66qxTG9SktjFPOIlQ3aX52R3yus4BbZ0r'; 
+
+    async function searchUserId() {
+      const email = document.getElementById('searchEmail').value.trim();
+      const resEl = document.getElementById('searchResult');
+      if (!email.includes('@')) { resEl.innerHTML = '<span class="error">❌ 請輸入有效 Email</span>'; return; }
+      
+      resEl.innerHTML = '<span class="info">🔍 查詢中...</span>';
+      try {
+        const res = await fetch(`${WORKER_URL}/admin/search`, {
+          method: 'POST', headers: { 'Content-Type':'application/json', 'X-Admin-Token': ADMIN_TOKEN },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (data.success && data.userId) {
+          resEl.innerHTML = `✅ 找到用戶: <span class="user-id">${data.userId}</span> 
+            <div class="actions" style="margin-top:8px;">
+              <button class="btn-takeover" onclick="executeAction('takeover','${data.userId}')">🔒 接管</button>
+              <button class="btn-release" onclick="executeAction('release','${data.userId}')">🔓 釋放</button>
+            </div>`;
+        } else {
+          resEl.innerHTML = '<span class="error">❌ 找不到該 Email 綁定紀錄</span>';
+        }
+      } catch(e) { resEl.innerHTML = '<span class="error">❌ 查詢失敗</span>'; }
+    }
+
+    async function loadRecentUsers() {
+      const listEl = document.getElementById('recentList');
+      try {
+        const res = await fetch(`${WORKER_URL}/admin/recent`, {
+          method: 'POST', headers: { 'Content-Type':'application/json', 'X-Admin-Token': ADMIN_TOKEN },
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (data.success && data.users.length > 0) {
+          let html = `<table class="user-table"><thead><tr><th>暱稱</th><th>userId</th><th>綁定信箱</th><th>操作</th></tr></thead><tbody>`;
+          data.users.forEach(u => {
+            const time = new Date(u.lastActive).toLocaleString('zh-TW');
+            html += `<tr>
+              <td>${u.displayName}</td>
+              <td class="user-id">${u.userId}</td>
+              <td>${u.email || '-'}</td>
+              <td class="actions">
+                <button class="btn-takeover" onclick="executeAction('takeover','${u.userId}')">接管</button>
+                <button class="btn-release" onclick="executeAction('release','${u.userId}')">釋放</button>
+              </td>
+            </tr>`;
+          });
+          html += `</tbody></table>`;
+          listEl.innerHTML = html;
+        } else {
+          listEl.innerHTML = '<span style="color:#888;">暫無活躍用戶紀錄</span>';
+        }
+      } catch(e) { listEl.innerHTML = '<span class="error">載入失敗</span>'; }
+    }
+
+    async function executeAction(action, userId) {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = action === 'takeover' ? '🔒 執行接管中...' : '🔓 執行釋放中...';
+      statusEl.className = 'info';
+      try {
+        const res = await fetch(`${WORKER_URL}/admin/${action}`, {
+          method: 'POST', headers: { 'Content-Type':'application/json', 'X-Admin-Token': ADMIN_TOKEN },
+          body: JSON.stringify({ targetUserId: userId })
+        });
+        const result = await res.json();
+        if (result.success) {
+          statusEl.textContent = `✅ ${action==='takeover'?'已接管 (AI 靜音)':'已釋放 (AI 恢復)'} | ${userId.substring(0,8)}...`;
+          statusEl.className = 'success';
+          loadRecentUsers(); // 刷新列表
+        } else {
+          statusEl.textContent = '❌ 操作失敗'; statusEl.className = 'error';
+        }
+      } catch(e) { statusEl.textContent = '❌ 網路錯誤'; statusEl.className = 'error'; }
+    }
+
+    // 初始載入活躍用戶列表
+    loadRecentUsers();
+    // 每 30 秒自動刷新列表
+    setInterval(loadRecentUsers, 30000);
+  </script>
+</body>
+</html>
